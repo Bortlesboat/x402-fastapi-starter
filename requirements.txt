@@ -1,0 +1,4 @@
+fastapi
+uvicorn[standard]
+x402[fastapi]
+python-dotenv
