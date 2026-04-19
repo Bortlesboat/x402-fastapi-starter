@@ -3,20 +3,18 @@
 import os
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 
-from x402 import x402ResourceServer
-from x402.http import FacilitatorConfig, HTTPFacilitatorClient
-from x402.http.middleware.fastapi import PaymentMiddlewareASGI, payment_middleware
+from x402.http import FacilitatorConfig, HTTPFacilitatorClient, PaymentOption
+from x402.http.middleware.fastapi import PaymentMiddlewareASGI
+from x402.http.types import RouteConfig
 from x402.mechanisms.evm.exact import ExactEvmServerScheme
+from x402.server import x402ResourceServer
 
 load_dotenv()
 
 # --- Config ---
-FACILITATOR_URL = os.getenv(
-    "FACILITATOR_URL",
-    "https://x402-facilitator.happysmoke-e4fd0a77.eastus.azurecontainerapps.io",
-)
+FACILITATOR_URL = os.getenv("FACILITATOR_URL", "https://facilitator.bitcoinsapi.com")
 PAY_TO = os.getenv("PAY_TO", "0xe166267c3648b5ca4419f2c58faed8cd4df87d54")
 PRICE = os.getenv("PRICE", "$0.001")
 NETWORK = os.getenv("NETWORK", "eip155:8453")
@@ -24,23 +22,26 @@ NETWORK = os.getenv("NETWORK", "eip155:8453")
 # --- x402 Setup ---
 facilitator = HTTPFacilitatorClient(FacilitatorConfig(url=FACILITATOR_URL))
 server = x402ResourceServer(facilitator)
-server.register("eip155:*", ExactEvmServerScheme())
+server.register(NETWORK, ExactEvmServerScheme())
 
 # Protected route config — only /api/premium requires payment
-routes = {
-    "GET /api/premium": {
-        "accepts": {
-            "scheme": "exact",
-            "payTo": PAY_TO,
-            "price": PRICE,
-            "network": NETWORK,
-        },
-        "description": "Premium content endpoint",
-    },
+routes: dict[str, RouteConfig] = {
+    "GET /api/premium": RouteConfig(
+        accepts=[
+            PaymentOption(
+                scheme="exact",
+                pay_to=PAY_TO,
+                price=PRICE,
+                network=NETWORK,
+            ),
+        ],
+        description="Premium content endpoint",
+        mime_type="application/json",
+    ),
 }
 
 # --- FastAPI App ---
-app = FastAPI(title="x402 FastAPI Starter", version="0.1.0")
+app = FastAPI(title="x402 FastAPI Starter", version="0.2.0")
 
 # Add x402 payment middleware (intercepts requests to protected routes)
 app.add_middleware(PaymentMiddlewareASGI, routes=routes, server=server)
@@ -53,7 +54,7 @@ async def hello():
 
 
 @app.get("/api/premium")
-async def premium(request: Request):
+async def premium():
     """Paid endpoint — requires x402 payment (0.001 USDC on Base)."""
     return {
         "message": "You have accessed premium content!",
