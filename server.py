@@ -6,16 +6,23 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 
 from x402.http import FacilitatorConfig, HTTPFacilitatorClient, PaymentOption
-from x402.http.middleware.fastapi import PaymentMiddlewareASGI
+from x402.http.middleware.fastapi import payment_middleware
 from x402.http.types import RouteConfig
 from x402.mechanisms.evm.exact import ExactEvmServerScheme
 from x402.server import x402ResourceServer
 
 load_dotenv()
 
+def required_env(name: str) -> str:
+    value = os.getenv(name, "").strip()
+    if not value:
+        raise ValueError(f"{name} is required; set it in .env before starting the server")
+    return value
+
+
 # --- Config ---
-FACILITATOR_URL = os.getenv("FACILITATOR_URL", "https://facilitator.bitcoinsapi.com")
-PAY_TO = os.getenv("PAY_TO", "0xe166267c3648b5ca4419f2c58faed8cd4df87d54")
+FACILITATOR_URL = required_env("FACILITATOR_URL")
+PAY_TO = required_env("PAY_TO")
 PRICE = os.getenv("PRICE", "$0.001")
 NETWORK = os.getenv("NETWORK", "eip155:8453")
 
@@ -44,7 +51,7 @@ routes: dict[str, RouteConfig] = {
 app = FastAPI(title="x402 FastAPI Starter", version="0.2.0")
 
 # Add x402 payment middleware (intercepts requests to protected routes)
-app.add_middleware(PaymentMiddlewareASGI, routes=routes, server=server)
+app.middleware("http")(payment_middleware(routes, server))
 
 
 @app.get("/api/hello")

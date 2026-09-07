@@ -1,4 +1,4 @@
 fastapi
 uvicorn[standard]
-x402[fastapi]
+x402[fastapi,evm]>=2.22.0,<3
 python-dotenv
